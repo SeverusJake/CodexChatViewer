@@ -90,8 +90,6 @@ The main runtime flow is:
 
 The app polls periodically when auto-refresh is enabled. Refresh affects the session list first, then reloads the selected chat only if its signature changed.
 
-## Manual Development Workflow
-
 ## Setup
 
 - Use Python 3.x
@@ -99,7 +97,7 @@ The app polls periodically when auto-refresh is enabled. Refresh affects the ses
 - Start the app with `python codex_chat_viewer.py`
 - Use real session logs under `~/.codex/sessions` to validate behavior
 
-The project does not currently define a formal environment manager, dependency lockfile, or test runner.
+Install dependencies with `pip install -r requirements.txt`. The project still does not define a formal environment manager or lockfile.
 
 ## How To Validate Changes
 
@@ -113,6 +111,10 @@ For parser or UI work, manual testing is the primary verification path:
 - use a message containing a bracketed path and verify Explorer opens correctly on Windows
 - test a large conversation and confirm older-message loading still works
 
+Automated checks should start with:
+
+- `pytest`
+
 ## Platform Notes
 
 - The app contains Windows-specific behavior through `explorer` and `os.startfile()`
@@ -121,8 +123,6 @@ For parser or UI work, manual testing is the primary verification path:
 
 ## Known Constraints
 
-- No automated tests are present
-- No dependency manifest is checked in
 - No CI or release workflow is defined
 - Packaging assumptions currently live in `pyinstaller.py`, not in a reusable build config
 

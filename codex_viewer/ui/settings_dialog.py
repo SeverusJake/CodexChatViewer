@@ -82,13 +82,9 @@ class SettingsDialog(ctk.CTkToplevel):
         self.accent_button = ctk.CTkButton(card, text="Pick accent", width=130, command=self._pick_accent)
         self.accent_button.grid(row=1, column=1, sticky="e", padx=(0, 72), pady=8)
 
-        ctk.CTkLabel(card, text="Density").grid(row=2, column=0, sticky="w", padx=16, pady=8)
+        ctk.CTkLabel(card, text="Density").grid(row=2, column=0, sticky="w", padx=16, pady=(8, 16))
         self.density_menu = ctk.CTkOptionMenu(card, values=["compact", "balanced", "relaxed"])
-        self.density_menu.grid(row=2, column=1, sticky="e", padx=16, pady=8)
-
-        ctk.CTkLabel(card, text="Show metadata in chat rows").grid(row=3, column=0, sticky="w", padx=16, pady=(8, 16))
-        self.preview_meta_switch = ctk.CTkSwitch(card, text="")
-        self.preview_meta_switch.grid(row=3, column=1, sticky="e", padx=16, pady=(8, 16))
+        self.density_menu.grid(row=2, column=1, sticky="e", padx=16, pady=(8, 16))
 
     def _build_reading_tab(self, tab):
         card = self.app.make_card(tab)
@@ -181,7 +177,6 @@ class SettingsDialog(ctk.CTkToplevel):
         self.appearance_menu.set(self.temp_config["appearance_mode"])
         self.density_menu.set(self.temp_config["density"])
         self.sort_menu.set(self.temp_config["sort_mode"])
-        self.preview_meta_switch.select() if self.temp_config["show_preview_meta"] else self.preview_meta_switch.deselect()
         self.show_meta_switch.select() if self.temp_config["show_meta_default"] else self.show_meta_switch.deselect()
 
         self.font_family_entry.delete(0, "end")
@@ -232,7 +227,6 @@ class SettingsDialog(ctk.CTkToplevel):
             self.temp_config["appearance_mode"] = self.appearance_menu.get()
             self.temp_config["density"] = self.density_menu.get()
             self.temp_config["sort_mode"] = self.sort_menu.get()
-            self.temp_config["show_preview_meta"] = bool(self.preview_meta_switch.get())
             self.temp_config["show_meta_default"] = bool(self.show_meta_switch.get())
             self.temp_config["font_family"] = self.font_family_entry.get().strip() or "Segoe UI"
             self.temp_config["font_size"] = int(self.font_size_entry.get())

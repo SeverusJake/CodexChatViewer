@@ -26,15 +26,16 @@ codex_viewer/ui/settings_dialog.py
 
 ## Requirements
 
-The repository currently does not include a pinned dependency file. Based on the source, the app requires:
+The project now includes a minimal dependency manifest in `requirements.txt`. The current dependencies are:
 
 - Python 3.x
 - `customtkinter`
+- `pytest` for tests
 
-If `customtkinter` is not installed yet:
+Install dependencies from the repository root:
 
 ```powershell
-pip install customtkinter
+pip install -r requirements.txt
 ```
 
 ## Run Locally
@@ -81,8 +82,6 @@ That script invokes PyInstaller in one-file, no-console mode and collects `custo
 
 The current repo is intentionally lightweight. It does not define:
 
-- a `requirements.txt` or lockfile
-- automated tests
 - CI workflows
 - release automation
 

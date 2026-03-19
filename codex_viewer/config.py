@@ -5,6 +5,10 @@ APP_TITLE = "Codex Chat Viewer"
 WINDOW_SIZE = "1480x920"
 MIN_WINDOW_SIZE = (1180, 760)
 CONFIG_FILE = Path.home() / ".codex_chat_viewer_config.json"
+VALID_APPEARANCE_MODES = {"dark", "light"}
+VALID_DENSITIES = {"compact", "balanced", "relaxed"}
+VALID_SORT_MODES = {"recent", "name"}
+VALID_GROUP_MODES = {"none", "month", "project"}
 
 DEFAULT_CONFIG = {
     "appearance_mode": "dark",
@@ -17,7 +21,6 @@ DEFAULT_CONFIG = {
     "density": "balanced",
     "sort_mode": "recent",
     "group_mode": "none",
-    "show_preview_meta": True,
     "accent_color": "#4c8bf5",
     "palette": {
         "bg": "#0b1220",
@@ -82,6 +85,28 @@ def deep_merge(base, override):
     return result
 
 
+def _normalize_int(value, default, minimum):
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, normalized)
+
+
+def normalize_config_values(config):
+    normalized = dict(config)
+    normalized["appearance_mode"] = normalized.get("appearance_mode") if normalized.get("appearance_mode") in VALID_APPEARANCE_MODES else DEFAULT_CONFIG["appearance_mode"]
+    normalized["density"] = normalized.get("density") if normalized.get("density") in VALID_DENSITIES else DEFAULT_CONFIG["density"]
+    normalized["sort_mode"] = normalized.get("sort_mode") if normalized.get("sort_mode") in VALID_SORT_MODES else DEFAULT_CONFIG["sort_mode"]
+    normalized["group_mode"] = normalized.get("group_mode") if normalized.get("group_mode") in VALID_GROUP_MODES else DEFAULT_CONFIG["group_mode"]
+    normalized["font_size"] = _normalize_int(normalized.get("font_size"), DEFAULT_CONFIG["font_size"], minimum=8)
+    normalized["poll_interval_ms"] = _normalize_int(normalized.get("poll_interval_ms"), DEFAULT_CONFIG["poll_interval_ms"], minimum=500)
+    normalized["updated_window_seconds"] = _normalize_int(normalized.get("updated_window_seconds"), DEFAULT_CONFIG["updated_window_seconds"], minimum=1)
+    normalized["auto_refresh_default"] = bool(normalized.get("auto_refresh_default", DEFAULT_CONFIG["auto_refresh_default"]))
+    normalized["show_meta_default"] = bool(normalized.get("show_meta_default", DEFAULT_CONFIG["show_meta_default"]))
+    return normalized
+
+
 def load_config():
     if not CONFIG_FILE.exists():
         return clone_default_config()
@@ -90,7 +115,7 @@ def load_config():
             user_cfg = json.load(handle)
     except Exception:
         return clone_default_config()
-    return deep_merge(clone_default_config(), user_cfg)
+    return normalize_config_values(deep_merge(clone_default_config(), user_cfg))
 
 
 def save_config(config):

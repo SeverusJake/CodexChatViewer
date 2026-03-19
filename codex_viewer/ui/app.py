@@ -117,7 +117,6 @@ class CodexViewerApp(ctk.CTk):
         self.selected_row_tag = None
         self.parsed_cache = {}
         self.known_mtimes = {}
-        self.selected_item = None
         self.selected_path = None
         self.selected_relative = None
         self.current_messages = []
@@ -413,11 +412,6 @@ class CodexViewerApp(ctk.CTk):
             self.refresh_file_list()
         self.schedule_poll()
 
-    def _change_sort(self, choice):
-        self.config["sort_mode"] = choice
-        save_config(self.config)
-        self.refresh_file_list()
-
     def change_group_mode(self, choice):
         self.config["group_mode"] = choice
         save_config(self.config)
@@ -509,7 +503,6 @@ class CodexViewerApp(ctk.CTk):
 
         self.files = new_entries
         self.filter_file_list(restore_relative=previous_selection)
-        self.status_text = f"{len(self.files)} chat files"
         if self.selected_path and self.selected_path.exists():
             self.reload_selected_chat()
 
@@ -564,9 +557,7 @@ class CodexViewerApp(ctk.CTk):
 
         if restore_tag is not None and restore_tag in self.list_tag_to_item:
             self.apply_list_selection(restore_tag, scroll=True)
-            self.selected_item = self.list_tag_to_item[restore_tag]
         elif not self.filtered_files:
-            self.selected_item = None
             self.selected_row_tag = None
 
     def apply_list_selection(self, row_tag, scroll=False):
@@ -592,7 +583,6 @@ class CodexViewerApp(ctk.CTk):
         if item is None:
             return "break"
         self.apply_list_selection(row_tag)
-        self.selected_item = item
         self.selected_path = item["path"]
         self.selected_relative = item["relative"]
         self.last_loaded_signature = None
@@ -797,7 +787,6 @@ class CodexViewerApp(ctk.CTk):
         self.apply_theme()
         for child in self.winfo_children():
             child.destroy()
-        self.selected_item = None
         self.selected_path = selected_path
         self.selected_relative = selected_relative
         self.current_messages = []
