@@ -316,10 +316,15 @@ class CodexViewerApp(ctk.CTk):
             fg=self.colors["text"],
             insertbackground=self.colors["text"],
             selectbackground=self.colors["selection"],
+            selectforeground=self.colors["text"],
+            inactiveselectbackground=self.colors["selection"],
             yscrollcommand=lambda *args: self.text_yscroll.set(*args),
         )
         self.text.grid(row=0, column=0, sticky="nsew")
         self.text.bind("<MouseWheel>", self.scroll_viewer_fast)
+        self.text.bind("<Key>", lambda _event: "break")
+        self.text.bind("<<Paste>>", lambda _event: "break")
+        self.text.bind("<<Cut>>", lambda _event: "break")
         self.text_yscroll = tk.Scrollbar(viewer_frame, orient="vertical", command=self.text.yview)
         self.text_yscroll.grid(row=0, column=1, sticky="ns")
         self.configure_text_tags()
@@ -346,6 +351,7 @@ class CodexViewerApp(ctk.CTk):
         self.text.tag_raise("inline_code")
         self.text.tag_raise("angle_token")
         self.text.tag_raise("bracket_link")
+        self.text.tag_raise("sel")
 
     def role_body_colors(self):
         if self.config["appearance_mode"] == "light":
@@ -384,7 +390,6 @@ class CodexViewerApp(ctk.CTk):
         self.clear_text()
         self.text.insert("end", title + "\n", "title")
         self.text.insert("end", body + "\n", "meta")
-        self.text.configure(state="disabled")
         self.summary_label.configure(text="")
         self.open_project_button.configure(state="disabled")
 
@@ -711,7 +716,6 @@ class CodexViewerApp(ctk.CTk):
             if last_message_time:
                 self.text.insert("end", f"last_message_time: {last_message_time}\n", "meta")
 
-        self.text.configure(state="disabled")
         self.text.see("end")
 
     def update_load_older_button(self):
