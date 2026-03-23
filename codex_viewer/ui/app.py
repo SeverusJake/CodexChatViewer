@@ -413,6 +413,9 @@ class CodexViewerApp(ctk.CTk):
         )
         self.text.grid(row=0, column=0, sticky="nsew")
         self.text.bind("<MouseWheel>", self.scroll_viewer_fast)
+        self.text.bind("<Control-c>", self.copy_selected_text)
+        self.text.bind("<Control-C>", self.copy_selected_text)
+        self.text.bind("<<Copy>>", self.copy_selected_text)
         self.text.bind("<Key>", lambda _event: "break")
         self.text.bind("<<Paste>>", lambda _event: "break")
         self.text.bind("<<Cut>>", lambda _event: "break")
@@ -498,6 +501,16 @@ class CodexViewerApp(ctk.CTk):
 
     def scroll_to_bottom(self):
         self.text.yview_moveto(1.0)
+
+    def copy_selected_text(self, _event=None):
+        try:
+            selected_text = self.text.get("sel.first", "sel.last")
+        except tk.TclError:
+            return "break"
+        self.clipboard_clear()
+        self.clipboard_append(selected_text)
+        self.update()
+        return "break"
 
     def get_chat_project_remap(self, chat_relative: str | None = None) -> str | None:
         key = chat_relative or self.selected_relative
