@@ -139,3 +139,24 @@ def test_parse_codex_file_prefers_timestamp_then_payload_timestamp_then_created_
 def test_parse_date_from_relative_path_handles_expected_and_unknown_shapes():
     assert parse_date_from_relative_path(Path("2026/03/20/session.jsonl")) == "2026-03-20"
     assert parse_date_from_relative_path(Path("misc/session.jsonl")) == "Unknown Date"
+
+
+def test_parse_codex_file_skips_environment_wrapper_lines_for_preview(tmp_path):
+    session_file = tmp_path / "session.jsonl"
+    write_jsonl(
+        session_file,
+        [
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": "<environment_context>\nC:\\Work\\CodexChatViewer\nmore details",
+                },
+            }
+        ],
+    )
+
+    _messages, preview, _last_message_time, _meta = parse_codex_file(session_file)
+
+    assert preview == r"C:\Work\CodexChatViewer"

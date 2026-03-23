@@ -1,5 +1,9 @@
 import json
+import re
 from pathlib import Path
+
+
+WRAPPER_LINE_PATTERN = re.compile(r"^<[^>]+>$")
 
 
 def safe_json_loads(line: str):
@@ -34,6 +38,18 @@ def extract_text_from_content(content):
 
     return "\n".join(parts).strip()
 
+
+
+
+def choose_preview_line(text: str) -> str | None:
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if WRAPPER_LINE_PATTERN.fullmatch(line):
+            continue
+        return line[:120]
+    return None
 
 def parse_date_from_relative_path(relative_path: Path) -> str:
     parts = relative_path.parts
@@ -102,7 +118,7 @@ def parse_codex_file(file_path: Path):
             )
 
             if role == "user" and not first_user_line:
-                first_user_line = text.splitlines()[0][:120]
+                first_user_line = choose_preview_line(text)
 
             if timestamp:
                 last_message_time = timestamp
