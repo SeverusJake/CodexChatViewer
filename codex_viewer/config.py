@@ -13,6 +13,7 @@ VALID_GROUP_MODES = {"none", "month", "project"}
 DEFAULT_CONFIG = {
     "appearance_mode": "dark",
     "auto_refresh_default": False,
+    "chat_project_remaps": {},
     "poll_interval_ms": 3000,
     "updated_window_seconds": 90,
     "show_meta_default": False,
@@ -99,6 +100,14 @@ def normalize_config_values(config):
     normalized["density"] = normalized.get("density") if normalized.get("density") in VALID_DENSITIES else DEFAULT_CONFIG["density"]
     normalized["sort_mode"] = normalized.get("sort_mode") if normalized.get("sort_mode") in VALID_SORT_MODES else DEFAULT_CONFIG["sort_mode"]
     normalized["group_mode"] = normalized.get("group_mode") if normalized.get("group_mode") in VALID_GROUP_MODES else DEFAULT_CONFIG["group_mode"]
+    remaps = normalized.get("chat_project_remaps")
+    if not isinstance(remaps, dict):
+        remaps = {}
+    normalized["chat_project_remaps"] = {
+        str(key): str(value)
+        for key, value in remaps.items()
+        if isinstance(key, str) and isinstance(value, str) and value.strip()
+    }
     normalized["font_size"] = _normalize_int(normalized.get("font_size"), DEFAULT_CONFIG["font_size"], minimum=8)
     normalized["poll_interval_ms"] = _normalize_int(normalized.get("poll_interval_ms"), DEFAULT_CONFIG["poll_interval_ms"], minimum=500)
     normalized["updated_window_seconds"] = _normalize_int(normalized.get("updated_window_seconds"), DEFAULT_CONFIG["updated_window_seconds"], minimum=1)

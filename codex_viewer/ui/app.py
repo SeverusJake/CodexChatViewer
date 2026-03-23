@@ -4,7 +4,7 @@ import subprocess
 import time
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
@@ -95,6 +95,93 @@ def detect_project_folder(preview: str | None) -> str | None:
     return str(candidate) if candidate.exists() else str(candidate)
 
 
+def replace_project_root(path: str, original_root: str | None, new_root: str | None) -> str:
+    normalized_path = normalize_explorer_path(path)
+    normalized_original = normalize_explorer_path(original_root or "")
+    normalized_new = normalize_explorer_path(new_root or "")
+    if not normalized_path or not normalized_original or not normalized_new:
+        return normalized_path
+    if normalized_path.lower() == normalized_original.lower():
+        return normalized_new
+    prefix = normalized_original.rstrip("\\") + "\\"
+    if not normalized_path.lower().startswith(prefix.lower()):
+        return normalized_path
+    suffix = normalized_path[len(prefix):]
+    return normalized_new.rstrip("\\") + "\\" + suffix
+
+
+class ProjectRemapDialog(ctk.CTkToplevel):
+    def __init__(self, app, chat_relative: str, original_root: str, current_root: str | None):
+        super().__init__(app)
+        self.app = app
+        self.chat_relative = chat_relative
+        self.original_root = original_root
+        self.title("Remap Project")
+        self.geometry("760x300")
+        self.minsize(720, 260)
+        self.transient(app)
+        self.grab_set()
+
+        self.new_root_var = tk.StringVar(value=current_root or "")
+
+        self.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 10))
+        header.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(header, text="Remap Project", font=ctk.CTkFont(size=24, weight="bold")).grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(
+            header,
+            text="Save a replacement project root for this selected chat.",
+            text_color=self.app.colors["muted"],
+        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+
+        content = self.app.make_card(self)
+        content.grid(row=1, column=0, sticky="nsew", padx=18, pady=(0, 12))
+        content.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(content, text="Chat").grid(row=0, column=0, sticky="w", padx=16, pady=(16, 6))
+        ctk.CTkLabel(content, text=chat_relative, text_color=self.app.colors["muted"], justify="left").grid(row=1, column=0, sticky="w", padx=16)
+
+        ctk.CTkLabel(content, text="Original project root").grid(row=2, column=0, sticky="w", padx=16, pady=(14, 6))
+        ctk.CTkLabel(content, text=original_root, text_color=self.app.colors["muted"], justify="left").grid(row=3, column=0, sticky="w", padx=16)
+
+        ctk.CTkLabel(content, text="New project root").grid(row=4, column=0, sticky="w", padx=16, pady=(14, 6))
+        entry_row = ctk.CTkFrame(content, fg_color="transparent")
+        entry_row.grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 16))
+        entry_row.grid_columnconfigure(0, weight=1)
+        self.new_root_entry = ctk.CTkEntry(entry_row, textvariable=self.new_root_var)
+        self.new_root_entry.grid(row=0, column=0, sticky="ew")
+        ctk.CTkButton(entry_row, text="Browse", width=92, command=self.pick_folder).grid(row=0, column=1, padx=(10, 0))
+
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 18))
+        footer.grid_columnconfigure(0, weight=1)
+        ctk.CTkButton(footer, text="Clear", fg_color="transparent", border_width=1, command=self.clear_remap).grid(row=0, column=1, padx=(10, 0))
+        ctk.CTkButton(footer, text="Cancel", fg_color="transparent", border_width=1, command=self.destroy).grid(row=0, column=2, padx=(10, 0))
+        ctk.CTkButton(footer, text="Save", command=self.save_remap).grid(row=0, column=3, padx=(10, 0))
+
+    def pick_folder(self):
+        selected = filedialog.askdirectory(initialdir=self.new_root_var.get() or self.original_root, parent=self)
+        if selected:
+            self.new_root_var.set(selected)
+
+    def clear_remap(self):
+        self.app.clear_chat_project_remap(self.chat_relative)
+        self.destroy()
+
+    def save_remap(self):
+        new_root = normalize_explorer_path(self.new_root_var.get())
+        if not new_root:
+            messagebox.showerror("Invalid folder", "Choose or enter a valid project folder.")
+            return
+        if not Path(new_root).is_dir():
+            messagebox.showerror("Folder not found", f"Could not find:\n{new_root}")
+            return
+        self.app.set_chat_project_remap(self.chat_relative, new_root)
+        self.destroy()
+
+
 class CodexViewerApp(ctk.CTk):
     MESSAGE_CHUNK_SIZE = 120
 
@@ -122,6 +209,7 @@ class CodexViewerApp(ctk.CTk):
         self.current_messages = []
         self.rendered_message_start = 0
         self.project_folder = None
+        self.original_project_folder = None
         self.last_loaded_signature = None
         self.poll_after_id = None
         self.link_targets = {}
@@ -158,6 +246,7 @@ class CodexViewerApp(ctk.CTk):
         self.config[self._palette_key()]["accent"] = self.config["accent_color"]
         self.config.setdefault("auto_refresh_default", False)
         self.config.setdefault("group_mode", "none")
+        self.config.setdefault("chat_project_remaps", {})
 
     def _palette_key(self, config=None):
         current = config or self.config
@@ -286,18 +375,20 @@ class CodexViewerApp(ctk.CTk):
 
         mid_controls = ctk.CTkFrame(self.viewer, fg_color="transparent")
         mid_controls.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 8))
-        mid_controls.grid_columnconfigure(4, weight=1)
+        mid_controls.grid_columnconfigure(5, weight=1)
         self.load_older_button = ctk.CTkButton(mid_controls, text="Load older messages", width=180, command=self.load_older_messages)
         self.load_older_button.grid(row=0, column=0, sticky="w")
         self.load_older_button.grid_remove()
         self.open_project_button = ctk.CTkButton(mid_controls, text="Open project folder", width=160, command=self.open_project_folder)
         self.open_project_button.grid(row=0, column=1, padx=(10, 0), sticky="w")
+        self.remap_project_button = ctk.CTkButton(mid_controls, text="Remap project", width=140, command=self.open_project_remap_dialog)
+        self.remap_project_button.grid(row=0, column=2, padx=(10, 0), sticky="w")
         self.top_button = ctk.CTkButton(mid_controls, text="Top", width=70, command=self.scroll_to_top)
-        self.top_button.grid(row=0, column=2, padx=(10, 0), sticky="w")
+        self.top_button.grid(row=0, column=3, padx=(10, 0), sticky="w")
         self.bottom_button = ctk.CTkButton(mid_controls, text="Bottom", width=80, command=self.scroll_to_bottom)
-        self.bottom_button.grid(row=0, column=3, padx=(10, 0), sticky="w")
+        self.bottom_button.grid(row=0, column=4, padx=(10, 0), sticky="w")
         self.summary_label = ctk.CTkLabel(mid_controls, text="", text_color=self.colors["muted"])
-        self.summary_label.grid(row=0, column=4, padx=(10, 0), sticky="e")
+        self.summary_label.grid(row=0, column=5, padx=(10, 0), sticky="e")
 
         viewer_frame = ctk.CTkFrame(self.viewer, fg_color="transparent")
         viewer_frame.grid(row=2, column=0, sticky="nsew", padx=14, pady=(0, 14))
@@ -392,6 +483,7 @@ class CodexViewerApp(ctk.CTk):
         self.text.insert("end", body + "\n", "meta")
         self.summary_label.configure(text="")
         self.open_project_button.configure(state="disabled")
+        self.remap_project_button.configure(state="disabled", text="Remap project")
 
     def scroll_list_fast(self, event):
         self.file_list.yview_scroll(-3 if event.delta > 0 else 3, "units")
@@ -406,6 +498,59 @@ class CodexViewerApp(ctk.CTk):
 
     def scroll_to_bottom(self):
         self.text.yview_moveto(1.0)
+
+    def get_chat_project_remap(self, chat_relative: str | None = None) -> str | None:
+        key = chat_relative or self.selected_relative
+        if not key:
+            return None
+        remap = self.config.get("chat_project_remaps", {}).get(key)
+        return normalize_explorer_path(remap) if remap else None
+
+    def set_chat_project_remap(self, chat_relative: str, new_root: str):
+        remaps = dict(self.config.get("chat_project_remaps", {}))
+        remaps[chat_relative] = normalize_explorer_path(new_root)
+        self.config["chat_project_remaps"] = remaps
+        save_config(self.config)
+        self.last_loaded_signature = None
+        if self.selected_relative == chat_relative and self.selected_path and self.selected_path.exists():
+            self.load_chat(self.selected_path)
+
+    def clear_chat_project_remap(self, chat_relative: str):
+        remaps = dict(self.config.get("chat_project_remaps", {}))
+        if chat_relative in remaps:
+            remaps.pop(chat_relative, None)
+            self.config["chat_project_remaps"] = remaps
+            save_config(self.config)
+        self.last_loaded_signature = None
+        if self.selected_relative == chat_relative and self.selected_path and self.selected_path.exists():
+            self.load_chat(self.selected_path)
+
+    def get_selected_original_project_root(self) -> str | None:
+        return normalize_explorer_path(self.original_project_folder) if self.original_project_folder else None
+
+    def get_effective_project_folder(self) -> str | None:
+        original_root = self.get_selected_original_project_root()
+        return self.get_chat_project_remap() or original_root
+
+    def remap_selected_chat_path(self, raw_path: str) -> str:
+        return replace_project_root(raw_path, self.get_selected_original_project_root(), self.get_chat_project_remap())
+
+    def update_project_controls(self):
+        has_original = bool(self.get_selected_original_project_root())
+        has_remap = bool(self.get_chat_project_remap())
+        effective_root = self.get_effective_project_folder()
+        self.project_folder = effective_root
+        self.open_project_button.configure(state="normal" if effective_root else "disabled")
+        self.remap_project_button.configure(
+            state="normal" if has_original else "disabled",
+            text="Edit remap" if has_remap else "Remap project",
+        )
+
+    def open_project_remap_dialog(self):
+        original_root = self.get_selected_original_project_root()
+        if not (self.selected_relative and original_root):
+            return
+        ProjectRemapDialog(self, self.selected_relative, original_root, self.get_chat_project_remap())
 
     def schedule_poll(self):
         if self.poll_after_id is not None:
@@ -687,8 +832,9 @@ class CodexViewerApp(ctk.CTk):
         self.hide_link_tooltip()
 
     def on_link_click(self, path):
-        if not open_in_explorer(path):
-            messagebox.showwarning("Path not found", f"Could not open:\n{path}")
+        resolved_path = self.remap_selected_chat_path(path)
+        if not open_in_explorer(resolved_path):
+            messagebox.showwarning("Path not found", f"Could not open:\n{resolved_path}")
 
     def render_text_messages(self):
         self.clear_text()
@@ -733,8 +879,9 @@ class CodexViewerApp(ctk.CTk):
         self.render_text_messages()
 
     def open_project_folder(self):
-        if self.project_folder:
-            open_in_explorer(self.project_folder)
+        project_folder = self.get_effective_project_folder()
+        if project_folder:
+            open_in_explorer(project_folder)
 
     def load_chat(self, path: Path):
         stat = path.stat()
@@ -745,10 +892,14 @@ class CodexViewerApp(ctk.CTk):
         date_label = parse_date_from_relative_path(relative if isinstance(relative, Path) else Path(relative))
         title = simplify_project_name(preview, path)
         self.chat_title.configure(text=f"{date_label}: {title}")
-        self.project_folder = parsed.get("project_folder")
-        self.open_project_button.configure(state="normal" if self.project_folder else "disabled")
+        self.original_project_folder = parsed.get("project_folder")
+        self.update_project_controls()
         if self.show_meta_var.get():
-            self.meta_label.configure(text=str(path))
+            meta_lines = [str(path)]
+            remapped_root = self.get_chat_project_remap()
+            if remapped_root:
+                meta_lines.append(f"remapped_project_root: {remapped_root}")
+            self.meta_label.configure(text="\n".join(meta_lines))
         else:
             self.meta_label.configure(text="")
         self.summary_label.configure(text=f"{len(messages)} messages")
@@ -758,20 +909,20 @@ class CodexViewerApp(ctk.CTk):
             self.rendered_message_start = 0
             self.update_load_older_button()
             self.show_empty_state("No readable messages", "The selected file loaded, but no readable message items were found.")
-            self.last_loaded_signature = (str(path), stat.st_mtime, stat.st_size, bool(self.show_meta_var.get()))
+            self.last_loaded_signature = (str(path), stat.st_mtime, stat.st_size, bool(self.show_meta_var.get()), self.get_chat_project_remap())
             return
 
         self.current_messages = messages
         self.rendered_message_start = max(0, len(messages) - self.MESSAGE_CHUNK_SIZE)
         self.update_load_older_button()
         self.render_text_messages()
-        self.last_loaded_signature = (str(path), stat.st_mtime, stat.st_size, bool(self.show_meta_var.get()))
+        self.last_loaded_signature = (str(path), stat.st_mtime, stat.st_size, bool(self.show_meta_var.get()), self.get_chat_project_remap())
 
     def reload_selected_chat(self):
         if not (self.selected_path and self.selected_path.exists()):
             return
         stat = self.selected_path.stat()
-        signature = (str(self.selected_path), stat.st_mtime, stat.st_size, bool(self.show_meta_var.get()))
+        signature = (str(self.selected_path), stat.st_mtime, stat.st_size, bool(self.show_meta_var.get()), self.get_chat_project_remap())
         if signature == self.last_loaded_signature:
             return
         self.load_chat(self.selected_path)
