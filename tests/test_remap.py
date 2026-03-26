@@ -1,5 +1,6 @@
+from pathlib import Path
 from codex_viewer.config import normalize_config_values
-from codex_viewer.ui.app import replace_project_root
+from codex_viewer.ui.app import replace_project_root, simplify_project_name
 
 
 def test_normalize_config_values_filters_invalid_chat_project_remaps():
@@ -39,3 +40,9 @@ def test_replace_project_root_leaves_unmatched_paths_unchanged():
     other_path = r"C:\SomewhereElse\notes.txt"
 
     assert replace_project_root(other_path, original_root, new_root) == other_path
+
+
+def test_simplify_project_name_uses_parent_folder_for_file_paths():
+    preview = r"H:\MyProjects\Python\CodexChatViewer\codex_viewer\ui\app.py"
+
+    assert simplify_project_name(preview, Path("fallback.jsonl")) == "CodexChatViewer"

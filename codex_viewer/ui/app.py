@@ -34,6 +34,7 @@ ROLE_LABELS = {
     "unknown": "Unknown",
 }
 GROUP_MODES = ["none", "month", "project"]
+NON_PROJECT_PATH_PARTS = {"src", "app", "apps", "lib", "libs", "pkg", "packages", "backend", "frontend", "client", "server", "web", "ui", "tests", "test", "docs", "scripts", "codex_viewer"}
 
 
 def normalize_explorer_path(raw_path: str) -> str:
@@ -71,13 +72,30 @@ def open_in_explorer(raw_path: str):
     return False
 
 
+def guess_project_root(candidate: Path) -> Path:
+    current = candidate.parent if candidate.suffix else candidate
+    while current.parent != current and current.name.lower() in NON_PROJECT_PATH_PARTS:
+        current = current.parent
+    return current
+
+
+def extract_project_path(preview: str | None) -> Path | None:
+    if not preview:
+        return None
+    match = WINDOWS_PATH_PATTERN.search(preview)
+    if not match:
+        return None
+    candidate = Path(normalize_explorer_path(match.group(0)))
+    return guess_project_root(candidate)
+
+
 def simplify_project_name(preview: str | None, fallback_path: Path) -> str:
+    project_path = extract_project_path(preview)
+    if project_path:
+        candidate = project_path.name.strip()
+        if candidate:
+            return candidate
     if preview:
-        match = WINDOWS_PATH_PATTERN.search(preview)
-        if match:
-            candidate = Path(match.group(0)).name.strip()
-            if candidate:
-                return candidate
         first_line = preview.splitlines()[0].strip()
         first_line = re.sub(r"\s+", " ", first_line)
         if first_line:
@@ -86,13 +104,10 @@ def simplify_project_name(preview: str | None, fallback_path: Path) -> str:
 
 
 def detect_project_folder(preview: str | None) -> str | None:
-    if not preview:
+    candidate = extract_project_path(preview)
+    if not candidate:
         return None
-    match = WINDOWS_PATH_PATTERN.search(preview)
-    if not match:
-        return None
-    candidate = Path(match.group(0))
-    return str(candidate) if candidate.exists() else str(candidate)
+    return str(candidate)
 
 
 def replace_project_root(path: str, original_root: str | None, new_root: str | None) -> str:

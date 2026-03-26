@@ -4,6 +4,8 @@ from pathlib import Path
 
 
 WRAPPER_LINE_PATTERN = re.compile(r"^<[^>]+>$")
+WINDOWS_PATH_PATTERN = re.compile(r"[A-Za-z]:\\(?:[^\\\r\n]+\\)*[^\\\r\n]+")
+PREVIEW_MESSAGE_LIMIT = 12
 
 
 def safe_json_loads(line: str):
@@ -41,14 +43,41 @@ def extract_text_from_content(content):
 
 
 
-def choose_preview_line(text: str) -> str | None:
+def normalize_preview_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line.strip())
+
+
+def iter_preview_lines(text: str):
     for raw_line in text.splitlines():
-        line = raw_line.strip()
+        line = normalize_preview_line(raw_line)
         if not line:
             continue
         if WRAPPER_LINE_PATTERN.fullmatch(line):
             continue
-        return line[:120]
+        if line == "```":
+            continue
+        yield line
+
+
+def choose_project_preview(candidates: list[str]) -> str | None:
+    lines = []
+    for text in candidates:
+        lines.extend(iter_preview_lines(text))
+
+    for line in lines:
+        match = WINDOWS_PATH_PATTERN.search(line)
+        if match:
+            return match.group(0)[:120]
+
+    keyword_lines = [
+        line for line in lines
+        if any(keyword in line.lower() for keyword in ("cwd", "workdir", "project", "repo"))
+    ]
+    if keyword_lines:
+        return keyword_lines[0][:120]
+
+    if lines:
+        return lines[0][:120]
     return None
 
 def parse_date_from_relative_path(relative_path: Path) -> str:
@@ -63,6 +92,7 @@ def parse_date_from_relative_path(relative_path: Path) -> str:
 def parse_codex_file(file_path: Path):
     messages = []
     first_user_line = None
+    preview_candidates = []
     last_message_time = None
     meta = {
         "response_items": 0,
@@ -108,6 +138,9 @@ def parse_codex_file(file_path: Path):
                 or payload.get("created_at")
             )
 
+            if len(preview_candidates) < PREVIEW_MESSAGE_LIMIT:
+                preview_candidates.append(text)
+
             messages.append(
                 {
                     "role": role,
@@ -118,9 +151,10 @@ def parse_codex_file(file_path: Path):
             )
 
             if role == "user" and not first_user_line:
-                first_user_line = choose_preview_line(text)
+                first_user_line = choose_project_preview([text])
 
             if timestamp:
                 last_message_time = timestamp
 
-    return messages, first_user_line, last_message_time, meta
+    preview = choose_project_preview(preview_candidates) or first_user_line
+    return messages, preview, last_message_time, meta

@@ -160,3 +160,32 @@ def test_parse_codex_file_skips_environment_wrapper_lines_for_preview(tmp_path):
     _messages, preview, _last_message_time, _meta = parse_codex_file(session_file)
 
     assert preview == r"C:\Work\CodexChatViewer"
+
+
+def test_parse_codex_file_uses_early_path_from_other_messages_for_preview(tmp_path):
+    session_file = tmp_path / "session.jsonl"
+    write_jsonl(
+        session_file,
+        [
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "user",
+                    "content": "<environment_context>\nworking on this now",
+                },
+            },
+            {
+                "type": "response_item",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": "Check H:\\MyProjects\\Python\\CodexChatViewer\\codex_viewer\\ui\\app.py",
+                },
+            },
+        ],
+    )
+
+    _messages, preview, _last_message_time, _meta = parse_codex_file(session_file)
+
+    assert preview == r"H:\MyProjects\Python\CodexChatViewer\codex_viewer\ui\app.py"
