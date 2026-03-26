@@ -89,18 +89,26 @@ def extract_project_path(preview: str | None) -> Path | None:
     return guess_project_root(candidate)
 
 
+def clean_project_name(name: str) -> str:
+    cleaned = re.sub(r"\s+", " ", name).strip()
+    cleaned = cleaned.strip("`'\" ")
+    cleaned = re.sub(r"[`.?,;:]+$", "", cleaned).strip()
+    return cleaned or name.strip()
+
+
 def simplify_project_name(preview: str | None, fallback_path: Path) -> str:
     project_path = extract_project_path(preview)
     if project_path:
         candidate = project_path.name.strip()
         if candidate:
-            return candidate
+            return clean_project_name(candidate)
     if preview:
         first_line = preview.splitlines()[0].strip()
         first_line = re.sub(r"\s+", " ", first_line)
         if first_line:
-            return first_line[:60] + "..." if len(first_line) > 60 else first_line
-    return fallback_path.stem
+            display = first_line[:60] + "..." if len(first_line) > 60 else first_line
+            return clean_project_name(display)
+    return clean_project_name(fallback_path.stem)
 
 
 def detect_project_folder(preview: str | None) -> str | None:
@@ -383,8 +391,23 @@ class CodexViewerApp(ctk.CTk):
         top_controls = ctk.CTkFrame(self.viewer, fg_color="transparent")
         top_controls.grid(row=0, column=0, sticky="ew", padx=18, pady=(18, 8))
         top_controls.grid_columnconfigure(0, weight=1)
-        self.chat_title = ctk.CTkLabel(top_controls, text="Select a chat", font=ctk.CTkFont(size=22, weight="bold"))
-        self.chat_title.grid(row=0, column=0, sticky="w")
+        self.chat_title_var = tk.StringVar(value="Select a chat")
+        self.chat_title = tk.Entry(
+            top_controls,
+            textvariable=self.chat_title_var,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            readonlybackground=self.colors["surface"],
+            fg=self.colors["text"],
+            disabledforeground=self.colors["text"],
+            selectbackground=self.colors["selection"],
+            selectforeground=self.colors["text"],
+            insertbackground=self.colors["text"],
+            font=(self.config["font_family"], self.config["font_size"] + 9, "bold"),
+        )
+        self.chat_title.grid(row=0, column=0, sticky="ew")
+        self.chat_title.configure(state="readonly")
         self.meta_label = ctk.CTkLabel(top_controls, text="", text_color=self.colors["muted"], justify="left")
         self.meta_label.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
@@ -651,7 +674,7 @@ class CodexViewerApp(ctk.CTk):
             self.filtered_files = []
             self.file_list.delete("1.0", tk.END)
             self.chat_count_label.configure(text="0 shown")
-            self.chat_title.configure(text="No sessions folder found")
+            self.chat_title_var.set("No sessions folder found")
             self.meta_label.configure(text="")
             self.summary_label.configure(text="")
             self.load_older_button.grid_remove()
@@ -919,7 +942,7 @@ class CodexViewerApp(ctk.CTk):
         relative = path.relative_to(self.sessions_dir) if path.exists() else Path(path.name)
         date_label = parse_date_from_relative_path(relative if isinstance(relative, Path) else Path(relative))
         title = simplify_project_name(preview, path)
-        self.chat_title.configure(text=f"{date_label}: {title}")
+        self.chat_title_var.set(f"{date_label}: {title}")
         self.original_project_folder = parsed.get("project_folder")
         self.update_project_controls()
         if self.show_meta_var.get():
